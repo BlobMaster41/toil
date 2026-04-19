@@ -440,6 +440,24 @@ A fourth, optional stage is a confirmation-depth check, which asserts that the v
 
 When a consuming contract, like a cross-chain NativeSwap, wants to verify a claim, it calls Toil's verify-only entry point with the pipeline reference and the witness bundle. The pipeline runs deterministically, each mixer advancing the state as it consumes its slice of the witness, and if every stage passes, the final state commits to the validated proposition. The consuming contract then executes its own logic on top of that guarantee.
 
+```mermaid
+flowchart LR
+    W[Witness Bundle<br/>header + merkle path<br/>+ tx bytes + N confirmation headers]
+    W --> M1[Header Verifier Mixer<br/>recompute header hash<br/>check source chain difficulty]
+    M1 -->|valid header| M2[Inclusion Proof Mixer<br/>walk merkle path<br/>reconstruct root]
+    M2 -->|root matches| M3[Content Assertion Mixer<br/>parse transaction<br/>verify proposition]
+    M3 -->|proposition holds| M4[Confirmation Depth Mixer<br/>verify N follow on headers<br/>each meets difficulty]
+    M4 -->|deep enough| V[Verdict valid<br/>final state commits<br/>to verified proposition]
+    M1 -->|fails| R[Revert]
+    M2 -->|fails| R
+    M3 -->|fails| R
+    M4 -->|fails| R
+
+    style V fill:#2a8f4d,stroke:#fff,color:#fff
+    style R fill:#8f2a2a,stroke:#fff,color:#fff
+    style W fill:#2a4d8f,stroke:#fff,color:#fff
+```
+
 ### Worked example: cross-chain NativeSwap
 
 Consider a cross-chain variant of NativeSwap deployed alongside Toil. The logic is custom to this contract and not part of Toil itself, but it consumes Toil verifications as its security primitive. A buyer wants to acquire an OP20 token on the OPNet-Bitcoin deployment, paying in LTC on Litecoin. A provider holds the OP20 on the Bitcoin side and is willing to sell it for LTC received on the Litecoin side.
@@ -453,6 +471,42 @@ Consider a cross-chain variant of NativeSwap deployed alongside Toil. The logic 
 **Step four, NativeSwap calls Toil.** NativeSwap calls Toil's verify-only entry point with the cross-chain Litecoin verification pipeline and the witness bundle. The pipeline runs. The header verifier confirms the Litecoin block header meets Scrypt difficulty at the claimed height. The inclusion proof verifies the Merkle path reconstructs the claimed root. The content assertion verifies the transaction paid Y LTC to the expected address. The confirmation-depth check verifies N follow-on headers each with valid Scrypt proof of work. If any stage fails, the entire verification reverts, and NativeSwap rejects the claim.
 
 **Step five, settlement.** If the verification succeeds, NativeSwap releases the locked OP20 to the buyer, marks the offer filled, and emits a settlement event. The entire flow is atomic on the OPNet side, either the swap settles or it does not, and no intermediate state leaves room for exploitation.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as Provider
+    participant NS as Cross-chain NativeSwap<br/>(OPNet-Bitcoin)
+    participant B as Buyer
+    participant LTC as Litecoin Network
+    participant Core as Toil Core<br/>(OPNet-Bitcoin)
+
+    P->>NS: publishOffer<br/>X OP20 for Y LTC to LTC address<br/>require N confirmations
+    NS->>NS: lock X OP20 in escrow
+
+    B->>LTC: send Y LTC to specified address
+    LTC-->>B: tx included in block H
+    Note over LTC: N blocks extend the chain<br/>past block H
+
+    B->>B: assemble witness bundle<br/>header H, merkle path, tx bytes,<br/>headers H+1 to H+N
+
+    B->>NS: claimOffer(witness bundle)
+    NS->>Core: verifyStateless(pipeline, witness)
+
+    Core->>Core: Scrypt verify header H<br/>meets Litecoin difficulty
+    Core->>Core: walk merkle path<br/>tx is in block H
+    Core->>Core: parse tx<br/>Y LTC paid to expected address
+    Core->>Core: verify N follow on headers<br/>each meets Scrypt difficulty
+
+    alt all stages pass
+        Core-->>NS: valid
+        NS->>B: release X OP20 from escrow
+        NS-->>B: SettlementEvent
+    else any stage fails
+        Core-->>NS: invalid
+        NS-->>B: revert
+    end
+```
 
 The reverse direction works symmetrically when OPNet runs on both chains. A buyer wanting to acquire a token that lives on OPNet-Litecoin while paying in BTC on Bitcoin does the same dance in the other direction. They send BTC on Bitcoin, the OPNet-Litecoin contract verifies the Bitcoin payment by consuming the Bitcoin block header (which OPNet-Litecoin can verify as a pure function via a registered Bitcoin header verifier mixer, since SHA256 verification is deterministic regardless of which host chain is running the pipeline), and releases the token on the Litecoin side. The same OP20 can exist as parallel deployments on both OPNet instances, with the cross-chain NativeSwap contracts coordinating swaps between them.
 
