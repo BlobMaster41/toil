@@ -1,6 +1,6 @@
 # Toil
 
-> A composable proof of work primitive on Bitcoin. Toil turns verifiable computational work into a callable resource that any OPNet contract can consume. Coin minting is the reference implementation. The primitive is the product.
+> A composable proof of work primitive any chain supporting OPNet. Toil turns verifiable computational work into a callable resource that any OPNet contract can consume. Coin minting is the reference implementation. The primitive is the product.
 
 [toil.org](https://toil.org)
 
@@ -15,18 +15,19 @@
 7. [Deploying a Mining Pool](#deploying-a-mining-pool)
 8. [The Proof of Work Pipeline](#the-proof-of-work-pipeline)
 9. [Merge Mining with Bitcoin](#merge-mining-with-bitcoin)
-10. [Score Computation and Variance Curves](#score-computation-and-variance-curves)
-11. [Rounds and Share Accounting](#rounds-and-share-accounting)
-12. [Minimum Target and Retargeting](#minimum-target-and-retargeting)
-13. [Reward Determination](#reward-determination)
-14. [Multi Algo Pools](#multi-algo-pools)
-15. [Consuming Proofs from Other Contracts](#consuming-proofs-from-other-contracts)
-16. [The Mixer Extension Model](#the-mixer-extension-model)
-17. [The Reward Hook Extension Model](#the-reward-hook-extension-model)
-18. [Security and Safety Considerations](#security-and-safety-considerations)
-19. [A Worked Example from Start to Finish](#a-worked-example-from-start-to-finish)
-20. [Parameters Reference](#parameters-reference)
-21. [Summary](#summary)
+10. [Cross-Chain State Verification and Bridgeless Swaps](#cross-chain-state-verification-and-bridgeless-swaps)
+11. [Score Computation and Variance Curves](#score-computation-and-variance-curves)
+12. [Rounds and Share Accounting](#rounds-and-share-accounting)
+13. [Minimum Target and Retargeting](#minimum-target-and-retargeting)
+14. [Reward Determination](#reward-determination)
+15. [Multi Algo Pools](#multi-algo-pools)
+16. [Consuming Proofs from Other Contracts](#consuming-proofs-from-other-contracts)
+17. [The Mixer Extension Model](#the-mixer-extension-model)
+18. [The Reward Hook Extension Model](#the-reward-hook-extension-model)
+19. [Security and Safety Considerations](#security-and-safety-considerations)
+20. [A Worked Example from Start to Finish](#a-worked-example-from-start-to-finish)
+21. [Parameters Reference](#parameters-reference)
+22. [Summary](#summary)
 
 ---
 
@@ -34,13 +35,15 @@
 
 Toil is a primitive, not a product. The primitive is verifiable proof of work made composable and callable from any OPNet contract. The product is whatever anyone chooses to build with it. Coin minting is the most obvious application and the one we ship as a reference implementation, but it is not why Toil exists. It is an example of what Toil lets you do, not the reason Toil is interesting.
 
-The reason Toil is interesting, and the reason it could not exist on any other smart contract platform, is that OPNet is a consensus layer built on Bitcoin rather than a chain beside it or a L2 on top of it. An OPNet contract can read Bitcoin state natively. It can verify Bitcoin transactions inline. It can compare a submission against Bitcoin's actual current block difficulty. This architectural position, which is specific to OPNet, is what lets Toil do something that every prior attempt at "mineable coins on a smart contract platform" could not do. Toil pipelines can be, if a creator chooses, literally the same double SHA256 work that Bitcoin miners are computing right now for Bitcoin itself. No translation layer, no wrapped form of hashrate, no bridged version of mining. The exact same hashes, verified inline by the exact same function Bitcoin uses.
+The reason Toil is interesting, and the reason it could not exist on any other smart contract platform, is that OPNet is a consensus layer that lives directly on top of a UTXO chain rather than a chain beside it or a L2 on top of it. Bitcoin is OPNet's first deployment and the chain this document primarily discusses, but the architecture is substrate-agnostic. The same consensus layer can be deployed on any UTXO chain that provides the primitives OPNet needs, Litecoin, Dogecoin, or any other UTXO-model chain. Anyone can do it today. Wherever OPNet runs, contracts execute in an environment where the host chain's state is a first class input. An OPNet contract can read that state natively, verify host chain transactions inline, and compare a submission against the host chain's actual current block difficulty. This architectural position, which is specific to OPNet, is what lets Toil do something that every prior attempt at "mineable coins on a smart contract platform" could not do. Toil pipelines can be, if a creator chooses, literally the same double SHA256 work that Bitcoin miners are computing right now for Bitcoin itself. No translation layer, no wrapped form of hashrate, no bridged version of mining. The exact same hashes, verified inline by the exact same function Bitcoin uses. On an OPNet deployment hosted by Litecoin, the same property holds for Scrypt. On Dogecoin, the same. Each OPNet instance inherits native access to its host chain's proof of work.
 
 The implication compounds. Any application on OPNet can now require verifiable computational work as a condition for any action it wants to gate, and the work it demands can be tied directly to the world's largest pool of mining hardware. The sybil resistance a contract gets this way is not bonded to a stake, not bonded to a captcha, not bonded to a social attestation. It is bonded to electricity and silicon, and specifically to the electricity and silicon that already secures Bitcoin. That is a different kind of primitive than anything currently exposed in smart contract ecosystems, because every other smart contract ecosystem lives at a distance from Bitcoin's actual hashrate.
 
 One consequence deserves separate mention, because it is where Toil's long term ambition sits. The work a pipeline performs does not have to be arbitrary hashing. It can be any deterministic pure function, which means someone will eventually register a mixer whose computation is productive in its own right. A sparse matrix factorization step, a model inference pass, a protein folding iteration, a specific search space being explored. Gridcoin and Golem both chased this category on other substrates and neither succeeded, because they lacked a credible mechanism for verifying that the claimed computation actually happened and produced the claimed result. Toil's mixer interface is pure, deterministic, and pluggable by design, which is the shape of machine where that verification becomes feasible. Whether the ecosystem ever builds such a mixer is open, but the framework does not need to be redesigned to accommodate one, because the architecture already contemplates work that is not just hashing.
 
-Toil is the connective tissue between that hashrate and OPNet contract state. Coin launching is the first thing people will do with it. The rest is up to the ecosystem. QBTC is the first asset born at that junction, and the framing that matters for the rest of this document is that Toil is the protocol, plus everything else that wants to use the same primitive.
+A second consequence of the pure-deterministic mixer interface is that the data a mixer verifies does not have to originate on the host chain it runs on. A mixer can accept, as its witness bytes, a block header from a different UTXO chain along with a Merkle proof and a transaction body, and verify all three. Combined with OPNet's substrate-agnosticism, this turns Toil into the attestation primitive for bridgeless cross-chain composition. Any fact about any UTXO chain that can be committed into a block becomes readable by any OPNet contract, with the security property that forging the fact costs real hashrate on the source chain rather than compromising a committee of signers. Cross-chain swaps, lending, oracles, and arbitrary state queries become expressible without bridges, without multisigs, without trusted relayers. This is covered in its own section below, and it is, in its long term consequences, arguably the single largest unlock the framework provides.
+
+Toil is the connective tissue between that hashrate and OPNet contract state, and between every UTXO chain OPNet can reach. Coin launching is the first thing people will do with it. The rest is up to the ecosystem. QBTC is the first asset born at that junction, and the framing that matters for the rest of this document is that Toil is the protocol, plus everything else that wants to use the same primitive.
 
 ---
 
@@ -48,17 +51,19 @@ Toil is the connective tissue between that hashrate and OPNet contract state. Co
 
 Understanding the architectural position OPNet occupies is load bearing for understanding why Toil is not just "0xBitcoin on a different chain." 0xBitcoin was the 2018 Ethereum project that introduced the mint-via-PoW pattern in an ERC20 contract, and it functionally failed to maintain adoption over the following years. Toil's design avoids 0xBitcoin's failure modes, but the deeper reason Toil can be something different is that OPNet sits somewhere fundamentally different on the protocol stack.
 
-OPNet is not a L2 on Bitcoin. It is not a sidechain. It is not a bridged L1 that settles back to Bitcoin periodically. It is a consensus layer that lives on Bitcoin itself, which means OPNet contracts execute in an environment where Bitcoin's state is a first class input. A contract can see, within a single execution, what Bitcoin's current block hash is, what outputs a given Bitcoin transaction produced, what the network's current difficulty is, what a specific UTXO contains. None of this requires a bridge, an oracle, or a trusted relayer. It is native state access.
+OPNet is not a L2. It is not a sidechain. It is not a bridged L1 that settles back to its host periodically. It is a consensus layer that lives on a UTXO chain itself. Bitcoin is the first and primary deployment, but the architecture works on any UTXO chain that supplies the primitives OPNet needs, and deploying an OPNet instance on Litecoin, Dogecoin, or any other UTXO-model chain is something anyone can do today. Wherever it runs, OPNet contracts execute in an environment where the host chain's state is a first class input. A contract can see, within a single execution, what the host chain's current block hash is, what outputs a given host chain transaction produced, what the network's current difficulty is, what a specific UTXO contains. None of this requires a bridge, an oracle, or a trusted relayer. It is native state access.
 
-For Toil, this unlocks three things that are not possible on any other smart contract platform.
+For Toil, this unlocks four things that are not possible on any other smart contract platform.
 
-First, a pipeline can verify real Bitcoin work. A miner who finds a hash that satisfies Bitcoin's live difficulty condition can submit that hash to Toil as a proof of work, and the Core contract can verify, inline, that the work is genuine. This is merge mining in the strict technical sense, where the same hash simultaneously counts as a Bitcoin mining share and as a valid Toil submission.
+First, a pipeline can verify real host chain work. A miner who finds a hash that satisfies the host chain's live difficulty condition can submit that hash to Toil as a proof of work, and the Core contract can verify, inline, that the work is genuine. On the Bitcoin deployment this means merge mining with SHA256 against Bitcoin's actual difficulty. On a Litecoin deployment it means Scrypt against Litecoin's actual difficulty. On a Dogecoin deployment it means Scrypt against Dogecoin's. Each Toil instance inherits the mining industry of its host.
 
-Second, Toil pipelines can demand BTC payment as part of the submission envelope. If a pool's target definition checks that a specific Bitcoin transaction output paid a required amount to a specific address, the mining submission becomes conditional on a real Bitcoin payment landing at a real Bitcoin address. This is the same mechanism NativeSwap uses for its virtual reserve pattern. Toil gets the same primitive for free because it runs in the same environment.
+Second, Toil pipelines can demand host chain payment as part of the submission envelope. If a pool's target definition checks that a specific host chain transaction output paid a required amount to a specific address, the mining submission becomes conditional on a real payment landing at a real host chain address. This is the same mechanism NativeSwap uses for its virtual reserve pattern. Toil gets the same primitive for free because it runs in the same environment.
 
-Third, the economic gravity is different. Mining on Toil costs electricity to compute pipelines and gas to submit proofs. The gas is paid in BTC to OPNet's epoch miners, who are the validators securing the consensus layer. This is not a fabricated utility loop, it is the same flow that every OPNet transaction produces, except that Toil creates sustained reason for these transactions to happen. Miners spend electricity because they expect to earn tokens. Tokens get earned by submitting to contracts that run on gas. Gas pays validators. Validators run opnet nodes. The loop closes without Toil needing to hold any assets or act as any kind of treasury.
+Third, the economic gravity is different. Mining on Toil costs electricity to compute pipelines and gas to submit proofs. The gas is paid in the host chain's native asset to OPNet's epoch miners, who are the validators securing the consensus layer. This is not a fabricated utility loop, it is the same flow that every OPNet transaction produces, except that Toil creates sustained reason for these transactions to happen. Miners spend electricity because they expect to earn tokens. Tokens get earned by submitting to contracts that run on gas. Gas pays validators. Validators run OPNet nodes. The loop closes without Toil needing to hold any assets or act as any kind of treasury.
 
-These three properties are interdependent. Remove Bitcoin state access, and merge mining dies. Remove the BTC-native gas flow, and the economic loop loses its anchor. Remove the consensus layer position, and Toil becomes one more commodity token launcher on one more "sidechain". The framework is shaped around what OPNet specifically enables, which is also why it cannot be cloned to another environment without losing most of its purpose.
+Fourth, because OPNet can run on multiple UTXO chains, and because Toil mixers are pure deterministic functions, a Toil contract on one OPNet instance can verify claims about another UTXO chain by consuming that chain's block headers and Merkle proofs as witness bytes. The two OPNet instances do not need to trust each other. Each reads its own host chain natively, and cross-chain messages carry whatever proof the destination side needs to verify against its own view. This is what turns Toil into a bridgeless cross-chain attestation layer, and it is covered in full below.
+
+These four properties are interdependent. Remove host chain state access, and merge mining and cross-chain verification both die. Remove the native-gas economic flow, and the economic loop loses its anchor. Remove the consensus layer position, and Toil becomes one more commodity token launcher on one more "sidechain". The framework is shaped around what OPNet specifically enables, which is also why it cannot be cloned to another environment without losing most of its purpose.
 
 ---
 
@@ -66,7 +71,9 @@ These three properties are interdependent. Remove Bitcoin state access, and merg
 
 Toil's value surface extends well beyond coin minting. The following are applications that become possible once verifiable proof of work is a callable primitive on OPNet. Some of these are things the Toil team will build as reference implementations, some are things other teams will build, and some are things nobody has built yet because the primitive has never existed.
 
-**Real merge mining with Bitcoin.** Covered in its own section below, this is the capability that differentiates Toil from every similar attempt on other smart contract platforms. Bitcoin miners can submit shares they are already computing for Bitcoin and earn OPNet-native rewards without changing any of their hardware or workflow.
+**Real merge mining with Bitcoin.** Covered in its own section below, this is the capability that differentiates Toil from every similar attempt on other smart contract platforms. Bitcoin miners can submit shares they are already computing for Bitcoin and earn OPNet-native rewards without changing any of their hardware or workflow. The same pattern applies on any OPNet deployment hosted by another UTXO chain, with the host chain's mining industry in place of Bitcoin's.
+
+**Bridgeless cross-chain state verification.** Covered in its own section below, this is arguably the single largest unlock the framework provides. Toil mixers can verify claims about any UTXO chain's state by consuming that chain's block headers, Merkle proofs, and transaction data as witness bytes. Forging a claim costs real hashrate on the source chain rather than compromising a committee of signers. Cross-chain swaps, lending, oracles, ownership attestations, and arbitrary state queries become expressible without bridges, multisigs, federations, or trusted relayers.
 
 **Mineable coin launches.** The obvious application. A creator deploys a pool, configures a pipeline and target, picks a reward schedule, and miners start earning tokens. This is the reference implementation and it is useful on its own. It is also the thing that attracts initial mindshare because "fair launch mineable coin" is a concept people already understand.
 
@@ -206,7 +213,7 @@ Mixer contracts are external, pluggable, and pure. Each mixer implements a singl
 
 At launch, the Core ships with an initial set of built in mixers whose logic is compiled into the Core itself for gas efficiency. These core mixers include SHA256 chain, SHA1 chain, double SHA256, Keccak256 chain, and more.
 
-When someone wants to add a mixer that isn't in the initial set (such as Scrypt, X11, Lyra2, Argon2, VerusHash, a custom matmul variant with specific bit width, a productive work function like matrix factorization, or any other hash primitive), they deploy it as an external contract implementing the mixer interface. They submit a registration proposal to the Core, which includes metadata about the mixer (expected witness size, estimated gas cost, description). The Core's governance process (initially a designated owner, eventually a more decentralized mechanism) reviews the mixer and either approves or rejects it. Approved external mixers get a stable registry ID and can be referenced by any new pool from that point forward.
+When someone wants to add a mixer that isn't in the initial set (such as Scrypt, X11, Lyra2, Argon2, VerusHash, a custom matmul variant with specific bit width, a productive work function like matrix factorization, a cross-chain header verifier for a specific UTXO chain, or any other hash primitive), they deploy it as an external contract implementing the mixer interface. They submit a registration proposal to the Core, which includes metadata about the mixer (expected witness size, estimated gas cost, description). The Core's governance process (initially a designated owner, eventually a more decentralized mechanism) reviews the mixer and either approves or rejects it. Approved external mixers get a stable registry ID and can be referenced by any new pool from that point forward.
 
 Crucially, adding a new mixer never affects pools that already exist. A pool's pipeline is baked in at deployment and references mixers by ID. Those ID references are resolved once, at deployment, against the registry as it existed at that moment. Later changes to the registry cannot retroactively modify a pool's behavior.
 
@@ -352,7 +359,7 @@ The verification cost depends entirely on the pipeline. The two SHA256 anchors a
 
 ## Merge Mining with Bitcoin
 
-This is the capability that differentiates Toil from every similar project on every other smart contract platform. It is made possible by OPNet being a consensus layer on Bitcoin rather than a separate chain, and it is the single most strategically important feature Toil ships.
+This is the capability that differentiates Toil from every similar project on every other smart contract platform. It is made possible by OPNet being a consensus layer on a UTXO chain rather than a separate chain, and it is the single most strategically important feature Toil ships on its Bitcoin deployment. The same construction applies on any OPNet deployment hosted by another UTXO chain, with the host chain's mining industry in place of Bitcoin's, but Bitcoin is where the capability matters most today because Bitcoin's hashrate is the largest and most specialized in the world.
 
 The core idea is straightforward. A pool creator configures a pipeline whose target condition is "this hash satisfies Bitcoin's current block difficulty divided by a configured factor K." The Core can verify this target inline because OPNet contracts can read the current Bitcoin block difficulty natively. Any miner who finds a hash meeting that condition can submit it to the Core as a valid proof of work, and the Core accepts it.
 
@@ -389,9 +396,89 @@ Bitcoin miners participating in Toil produce three compounding effects on OPNet.
 
 None of this depends on Bitcoin miners caring about any specific token. It depends only on Bitcoin miners being economically rational actors who will claim free money when it is offered. Merge mining converts Toil from a framework with a cold start problem into a framework with an automatic distribution pipe to the world's largest pool of mining hardware.
 
+### Generalization to other UTXO hosts
+
+Because OPNet is substrate-agnostic, the same merge mining pattern applies on any OPNet deployment hosted by another UTXO chain. An OPNet-on-Litecoin instance can host a Toil pool whose target verifies Scrypt against Litecoin's live difficulty, giving Litecoin miners exactly the same zero-marginal-cost participation that Bitcoin miners have on the Bitcoin deployment. An OPNet-on-Dogecoin instance can do the same. A natural QLTC would mirror Litecoin's remaining supply schedule the way QBTC mirrors Bitcoin's. A natural QDOGE would mirror Dogecoin's. Each instance inherits its host chain's mining industry, halving schedule, and security budget without any additional work from the Toil team, because the architecture treats the host chain as a parameter rather than a hardcoded assumption.
+
 ### The honest caveat
 
 The merge mining economics only work if token values are high enough to justify the OPNet gas cost per submission. For a new pool with a low-value token, the break-even point might require batching thousands of shares per submission, or the pool might simply not attract merge miners until its token has some market capitalization. This is a bootstrapping curve, not a design problem. Dogecoin went through the same curve when it merge-mined with Litecoin. The curve resolves upward if the token has any real demand, and it resolves downward (the pool fades away) if it doesn't. Either outcome is fine for Toil as a framework. The framework's job is to make the pattern possible, not to guarantee any specific pool succeeds.
+
+---
+
+## Cross-Chain State Verification and Bridgeless Swaps
+
+Toil's mixer interface does not require pipelines to do arbitrary hashing. A mixer is any pure deterministic function, which means a mixer can take, as its witness bytes, a block header from another chain, a Merkle proof of inclusion for a specific transaction in that block, and the transaction data itself, then verify all three. Because OPNet contracts can also read their host chain's state natively, a pipeline running inside a Toil verification can cross-reference whatever connective tissue exists between the host chain and the target chain, if any exists. The consequence is a class of cross-chain operations that do not require any bridge, any multisig, any federation, or any trusted relayer. They require proof of work on the source chain, which is a different and stronger trust model than anything currently deployed in production.
+
+### The insight
+
+Every existing bridge design works by having some external party observe state on chain A and attest to it on chain B. The trust model varies, but the shape is always the same. WBTC trusts a central custodian to watch Bitcoin and mint on Ethereum. tBTC and sBTC trust a threshold set of bonded signers. Wormhole trusts a fixed set of nineteen guardians. LayerZero trusts an oracle and an executor to agree. IBC on Cosmos trusts each chain's validator set via light clients. In every case, forging a cross-chain claim requires compromising a fixed number of key holders, and nearly every one of those schemes has either been exploited at some point or is structurally exposed to that exploit. The committee is always the vulnerability.
+
+Toil replaces the committee with proof of work. A cross-chain claim, say "this payment was made on Litecoin," is a proposition about a specific Litecoin transaction being confirmed in a specific Litecoin block. Forging that claim requires producing a Litecoin block header that meets Litecoin's actual difficulty and commits to the fake transaction as part of its Merkle root. Producing such a header costs real Litecoin hashrate. The trust model collapses from "N of M key holders" to "whoever has hashrate on the chain the claim concerns," which is a completely different economic shape. An attacker with enough Scrypt hashrate to forge a valid Litecoin header could just honestly mine Litecoin for the same cost and keep the block rewards, so the attack is not economically distinct from participating in the chain legitimately. The economics are hostile to attack, not just the cryptography.
+
+### Two trust models
+
+The verification works under two conditions, each with slightly different properties.
+
+The first condition is that OPNet runs on both chains. OPNet is substrate-agnostic, and deploying it on any UTXO chain is something anyone can do today. In this case, each OPNet deployment can read its own host chain's state natively, and cross-chain messages travel between OPNet instances using whatever pattern the two Toil instances agree on. Each side verifies the other side's claims by running a pipeline that cross-references the claim against what the receiving side can see of the sending side, either through a shared ancestor chain, through bridge commits that each side independently verifies, or through any other cryptographic linkage the pair of chains provides. This is the cleanest case, because each side has full native access to its own host chain's state and nothing is being relayed.
+
+The second condition is that OPNet runs on one chain, and the target chain anchors its state into OPNet's host chain through some existing mechanism. Merge mining is the canonical example. If Litecoin is merge-mined with Dogecoin which timestamps into Bitcoin, or if a chain commits directly into Bitcoin in some auditable form, then any OPNet contract on the Bitcoin deployment can verify that chain's blocks by checking the anchoring commitment against its own host chain's blocks, which it reads natively. Namecoin, RSK, and various other anchored chains fit this pattern. In general, any chain that timestamps or commits into OPNet's host in a way OPNet can verify can be read into Toil pipelines.
+
+Both conditions give the same end result: the Toil contract on OPNet can verify claims about the other chain with no trusted party in the loop. Where they differ is robustness. The dual-deployment case requires no external assumptions beyond each host chain's own security. The anchored case depends on the anchoring mechanism remaining honest and continuous, but it still eliminates the signer committee that traditional bridges require, which is the load-bearing property.
+
+### How the pipeline works
+
+A cross-chain verification pipeline has one or more mixers whose job is to parse and verify external chain data. At minimum, the pipeline needs three things.
+
+A header verifier mixer that takes a block header as witness, recomputes the header hash using the target chain's hash function, and checks that the hash meets the target chain's actual difficulty at the claimed height. For Litecoin and Dogecoin, the hash function is Scrypt. For Bitcoin, double SHA256. For any future chain, whatever that chain uses. The mixer for each chain is a registered external mixer in the Core, deployed as its own contract. Once approved, any verification pipeline can reference it.
+
+An inclusion proof mixer that takes a Merkle path as witness, walks it to reconstruct the Merkle root, and checks the root against the root committed in the verified header. If the path reconstructs correctly, the transaction referenced by the path is part of the block.
+
+A content assertion mixer that takes the transaction as witness and verifies whatever proposition the consuming contract cares about. For a payment, this is "the transaction paid at least amount X to address Y." For an OP20 transfer on another OPNet instance, this is "the transaction was a transfer of at least X of token Y to address Z." Content assertions are application-specific but follow a consistent pattern.
+
+A fourth, optional stage is a confirmation-depth check, which asserts that the verified block sits at least N blocks deep in the target chain's active header chain. The witness for this stage includes a sequence of headers extending from the payment's block forward to a recent block, and the mixer verifies each successive header's proof of work and linkage. This is how the consuming contract enforces its finality assumption. Six confirmations, twenty, a hundred, whatever the value at stake justifies.
+
+When a consuming contract, like a cross-chain NativeSwap, wants to verify a claim, it calls Toil's verify-only entry point with the pipeline reference and the witness bundle. The pipeline runs deterministically, each mixer advancing the state as it consumes its slice of the witness, and if every stage passes, the final state commits to the validated proposition. The consuming contract then executes its own logic on top of that guarantee.
+
+### Worked example: cross-chain NativeSwap
+
+Consider a cross-chain variant of NativeSwap deployed alongside Toil. The logic is custom to this contract and not part of Toil itself, but it consumes Toil verifications as its security primitive. A buyer wants to acquire an OP20 token on the OPNet-Bitcoin deployment, paying in LTC on Litecoin. A provider holds the OP20 on the Bitcoin side and is willing to sell it for LTC received on the Litecoin side.
+
+**Step one, the provider publishes an offer.** They call the cross-chain NativeSwap contract on the Bitcoin-side OPNet and say, in effect, "I will sell X of this OP20 for Y LTC, with LTC payment to this specific Litecoin address, valid until block Z." The contract locks the provider's OP20 balance in escrow and records the offer parameters. Nothing has crossed chains yet.
+
+**Step two, the buyer accepts and pays on the source chain.** They send Y LTC to the specified Litecoin address on Litecoin's main chain. They wait for the number of Litecoin confirmations the contract requires. The required confirmation count is a parameter the offer sets based on the value at stake, six confirmations, twenty, a hundred, whatever makes a reorg economically unrealistic for this trade size.
+
+**Step three, the buyer constructs the Toil proof.** The buyer's transaction on OPNet is the thing that triggers settlement, and they must provide the chain data inside that transaction as witness bytes. The witness bundle contains the Litecoin block header that confirmed their payment, the Merkle path from their transaction up to that header's Merkle root, the raw transaction bytes, the sequence of N follow-on Litecoin headers required by the confirmation-depth assertion, and in the anchored trust model any additional proof showing the Litecoin chain links back to a block OPNet can see natively. All of this sits inside the OPNet transaction that asks the NativeSwap contract to release the OP20.
+
+**Step four, NativeSwap calls Toil.** NativeSwap calls Toil's verify-only entry point with the cross-chain Litecoin verification pipeline and the witness bundle. The pipeline runs. The header verifier confirms the Litecoin block header meets Scrypt difficulty at the claimed height. The inclusion proof verifies the Merkle path reconstructs the claimed root. The content assertion verifies the transaction paid Y LTC to the expected address. The confirmation-depth check verifies N follow-on headers each with valid Scrypt proof of work. If any stage fails, the entire verification reverts, and NativeSwap rejects the claim.
+
+**Step five, settlement.** If the verification succeeds, NativeSwap releases the locked OP20 to the buyer, marks the offer filled, and emits a settlement event. The entire flow is atomic on the OPNet side, either the swap settles or it does not, and no intermediate state leaves room for exploitation.
+
+The reverse direction works symmetrically when OPNet runs on both chains. A buyer wanting to acquire a token that lives on OPNet-Litecoin while paying in BTC on Bitcoin does the same dance in the other direction. They send BTC on Bitcoin, the OPNet-Litecoin contract verifies the Bitcoin payment by consuming the Bitcoin block header (which OPNet-Litecoin can verify as a pure function via a registered Bitcoin header verifier mixer, since SHA256 verification is deterministic regardless of which host chain is running the pipeline), and releases the token on the Litecoin side. The same OP20 can exist as parallel deployments on both OPNet instances, with the cross-chain NativeSwap contracts coordinating swaps between them.
+
+### Attack cost
+
+To cheat this flow, an attacker would need to produce a source chain block header meeting the source chain's actual difficulty that commits to a fake payment transaction in its Merkle root, then produce N follow-on headers each also meeting that difficulty. Producing such a chain fragment requires real proof of work at real source chain difficulty for N+1 blocks. An attacker with enough hashrate to do this also has the option of honestly mining those same blocks for the same cost and keeping the block rewards, which for a merge-mined chain like Litecoin means inheriting Bitcoin-grade attack cost for the portion of hashrate that merge-mines. The attacker must spend the same computational resources either way. Honest mining pays them block rewards. Dishonest mining produces a chain fragment that conflicts with the legitimate main chain and gets orphaned once the honest chain extends past it. The economics actively punish the attack, not just the cryptography.
+
+### Why this matters more than it sounds
+
+The specific example above is about cross-chain payments, which is useful on its own, but the pattern generalizes in every direction. The proposition being verified does not have to be a payment. It can be any fact about another chain that can be encoded as data committed inside a block. Possession of a specific UTXO. The existence of an ordinal inscription. A BRC-20 balance as of a particular block. The closure of a Lightning channel. An OP20 transfer on another OPNet instance. A smart contract execution on another OPNet instance. Each of these becomes a readable external fact that OPNet contracts can gate their logic on, with the guarantee that forging the fact costs real proof of work on the originating chain.
+
+This means OPNet contracts can reason about state across chains the way Ethereum contracts reason about state on Ethereum, natively and without a trusted committee. The cross-chain NativeSwap example is one instance. A cross-chain lending protocol where LTC UTXOs collateralize loans of OP20s on the Bitcoin-side OPNet is another. A multi-chain oracle where price feeds are submitted with proof of work attesting to the source chain's state at a specific block is another. A multi-chain game where in-game state on one OPNet instance triggers rewards on another is another. The entire category of "applications that need to know what happened on another chain" becomes buildable without the committee that has historically been the vulnerability.
+
+### Honest caveats
+
+This capability is strongest when the target chain has meaningful hashrate. If the target chain is a small proof-of-work chain with low hashrate, the cost of forging a fake header plus N confirmation headers is affordable to a well-funded attacker, and the security degrades proportionally. For LTC and DOGE, the merge-mining arrangement means that producing a valid header requires something close to Bitcoin-grade work for the portion of hashrate that is merge-mined, which is most of it. For a standalone small chain, the attack cost is only that chain's own hashrate, which could be small enough to matter. Consuming contracts should choose their target chains with this in mind, just as Ethereum DeFi protocols choose what assets to accept as collateral based on liquidity and manipulability.
+
+Proof-of-stake chains are outside the scope of this pattern in its strong form. Verifying a PoS chain's state requires verifying the chain's staking signatures, which is structurally different from verifying proof of work. Toil can in principle support this through a suitable mixer, because signature verification can be expressed as a pure function, but the security model becomes "verify the staking committee was honest," which reintroduces the committee trust assumption the PoW pattern eliminated. This is a design choice for whoever builds PoS-verification mixers, not a limitation of Toil itself, but it is worth being explicit that cross-chain verification of PoS chains does not inherit the same "no committee" property.
+
+There is also a timing assumption worth naming. Cross-chain verification reflects the state of the target chain at whatever block's header is provided, not the absolute latest state. Consuming contracts should require enough confirmation headers in the witness to make reorgs unlikely, which is a parameter the contract chooses based on its own risk tolerance. A cross-chain NativeSwap might require six Litecoin confirmations, or twenty, or a hundred, depending on the value at stake. This is an application-level concern, not a framework-level one, but it is worth being explicit because unlike a monolithic chain, cross-chain verification has to explicitly handle the possibility that the source chain might reorg after the proof is generated.
+
+Finally, cross-chain mixers themselves become a new class of code that needs to be audited as carefully as the core mining mixers. A bug in a Litecoin header verifier is more dangerous than a bug in a Mersenne prime multiply mixer, because its output directly governs whether cross-chain funds move. The mixer extension model's governance path applies here with extra weight, each cross-chain mixer should be audited by people who understand both OPNet contract semantics and the target chain's consensus rules before it ships.
+
+### What this changes about Toil
+
+Toil was described earlier in this document as the connective tissue between proof of work and OPNet contract state. With cross-chain state verification, Toil becomes the connective tissue between proof of work and the state of every UTXO chain OPNet can reach, either by running there or by reading through a verifiable anchor. That is a bigger surface than just coin minting or merge mining. It is arguably the biggest single unlock the framework provides, because it turns OPNet into the only smart contract environment where applications can reason about multiple chains' state without a committee in the middle. Toil is the first step toward this, the verification primitive the rest of the stack will be built on.
 
 ---
 
@@ -636,7 +723,7 @@ In a typical round, Bitcoin pool operators with spare share streams submit to al
 
 ## Consuming Proofs from Other Contracts
 
-Toil's most strategically important surface beyond pool creation is its verify-only entry point for other OPNet contracts. This is what turns Toil from "a coin minting framework" into "a composable primitive that other applications import."
+Toil's most strategically important surface beyond pool creation is its verify-only entry point for other OPNet contracts. This is what turns Toil from "a coin minting framework" into "a composable primitive that other applications import." Cross-chain NativeSwap, described earlier, is one consumer of this entry point. There are many others.
 
 The pattern is simple. A consuming contract calls a read-only Core function that takes a pipeline reference and a submission (nonce, witness, miner address, and reference block hash) and returns whether the submission is valid under that pipeline's rules. The function performs no state changes, emits no events, updates no pool accounting. It only runs the pipeline and target deterministically and returns the verdict. The consuming contract then uses the verdict in its own business logic.
 
@@ -672,6 +759,8 @@ A hashrate-selected committee contract can ask the Core "who are the top N miner
 
 A bounty marketplace contract can accept postings of the form "I will pay this amount in this OP20 to whoever first submits a valid Toil proof for pipeline X against target Y before block Z." The first successful submitter, verified via the Core's stateless entry point, claims the bounty. This turns the Core into a general computation market where compute buyers and sellers settle on chain.
 
+A cross-chain NativeSwap, described in its own section above, consumes the same entry point to release OP20s on one OPNet instance in response to verified payments on another chain.
+
 ### Why this matters more than the reference implementation
 
 None of the above requires Toil to know anything about the consuming contract. The Core exposes a pure verification function and stays out of the consuming contract's business. The consuming contract decides how to use the verdict. This is the definition of a composable primitive. The Core does not need to anticipate every use case, and the ecosystem does not need to wait for Toil's roadmap to extend proof-of-work into new domains.
@@ -692,7 +781,7 @@ Built in mixers have stable small ID numbers (say 1 through 50) reserved for the
 
 ### External mixers
 
-An external mixer is a standalone contract that implements the IMixer interface. It has its own address, its own bytecode, and its own deployment. When someone wants to add a new mixer to the protocol (say, Scrypt, because they want to launch a pool that mimics Litecoin; or Argon2 because they want maximum CPU resistance; or a custom productive-work mixer like a matrix factorization step), they deploy that implementation as an external mixer contract.
+An external mixer is a standalone contract that implements the IMixer interface. It has its own address, its own bytecode, and its own deployment. When someone wants to add a new mixer to the protocol (say, Scrypt, because they want to launch a pool that mimics Litecoin; or Argon2 because they want maximum CPU resistance; or a custom productive-work mixer like a matrix factorization step; or a cross-chain header verifier for a specific UTXO chain), they deploy that implementation as an external mixer contract.
 
 To make it available to pool creators, they register it with the Core. Registration is a two step process. First, the mixer author calls proposeMixer on the Core, passing the mixer's address along with metadata (name, version, description, max witness size, estimated gas per call). This creates a pending proposal with a proposal ID. Second, a governance process approves the proposal. At launch, governance is simply the Core owner. Over time, governance evolves toward a more decentralized mechanism (timelocked multisig, then on chain voting, then possibly fully permissionless).
 
@@ -722,7 +811,7 @@ Once approved, the external mixer gets a new stable registry ID (say, 51 or high
 
 An external mixer must conform to a strict interface for safety. The required method takes three byte arguments (state, params, witness slice) and returns two values (new state, witness bytes consumed). The method must be pure, meaning it cannot modify storage, emit events, call other contracts, access block properties, or do anything else with side effects. This is enforced in two layers: first, the Core validates the mixer's metadata at registration (the registration metadata declares the mixer as pure and specifies its gas budget), and second, the Core wraps every mixer call in a sandboxed sub call that enforces a gas limit and catches any attempt to do something forbidden.
 
-The reason for strict purity is that miners need to be able to compute mixer results off chain identically to how the Core computes them on chain. If a mixer had side effects, miners would see different results than the Core, and mining would be impossible. Purity is also what allows the Core to simulate submissions at pool deployment for gas cost estimation, because pure functions can be called without any risk of state corruption.
+The reason for strict purity is that miners need to be able to compute mixer results off chain identically to how the Core computes them on chain. If a mixer had side effects, miners would see different results than the Core, and mining would be impossible. Purity is also what allows the Core to simulate submissions at pool deployment for gas cost estimation, because pure functions can be called without any risk of state corruption. Purity is also what allows cross-chain header verifier mixers to exist at all, because they need to be computable off chain by any observer using only public source-chain data.
 
 ### External mixer gas cost
 
@@ -736,7 +825,7 @@ Pool creators should pay attention to mixer versioning when configuring their pi
 
 ### Why the extension model matters more than any shipped mixer
 
-The long term value of Toil lives in how the mixer registry grows, not in which mixers ship on day one. Every new mixer is a new shape of computational work the framework can verify, which is a new class of hardware bias, a new kind of productive work, a new primitive available to pool creators and consuming contracts. Getting the extension mechanism right (stable IMixer interface, trustworthy registration process, versioning discipline) is more important than shipping a perfect starter set, because the starter set is replaceable and the extension mechanism is not.
+The long term value of Toil lives in how the mixer registry grows, not in which mixers ship on day one. Every new mixer is a new shape of computational work the framework can verify, which is a new class of hardware bias, a new kind of productive work, a new cross-chain anchor, a new primitive available to pool creators and consuming contracts. Getting the extension mechanism right (stable IMixer interface, trustworthy registration process, versioning discipline) is more important than shipping a perfect starter set, because the starter set is replaceable and the extension mechanism is not.
 
 ---
 
@@ -840,9 +929,13 @@ A malicious or buggy hook could return zero, revert, or consume all available ga
 
 ### Mixer bugs
 
-A bug in a mixer is the most severe class of failure, because it can potentially let miners compute valid submissions with less work than intended. Mitigations include thorough audit of any mixer before registration, a conservative registration process that starts permissioned and only relaxes over time, versioning so that bugs can be fixed by deploying new versions without affecting old pools, and creator education so they pick well audited mixers for their pipelines.
+A bug in a mixer is the most severe class of failure, because it can potentially let miners compute valid submissions with less work than intended. For cross-chain header verifier mixers, a bug is especially severe because it can let an attacker forge a cross-chain claim and drain the consuming contract. Mitigations include thorough audit of any mixer before registration, a conservative registration process that starts permissioned and only relaxes over time, versioning so that bugs can be fixed by deploying new versions without affecting old pools, and creator education so they pick well audited mixers for their pipelines.
 
-Even with these measures, a bug is possible. The worst case consequence is that a specific pool's economics become broken (miners extract too much reward, devaluing the token). The blast radius is limited to that one pool and any others that use the same buggy mixer. Users of other pools are unaffected. This is why bug impact is bounded and recoverable (creators of affected pools can launch new pools with fixed mixers).
+Even with these measures, a bug is possible. The worst case consequence is that a specific pool's economics become broken (miners extract too much reward, devaluing the token), or that a specific cross-chain consuming contract gets drained. The blast radius is limited to that one pool and any others that use the same buggy mixer. Users of other pools are unaffected. This is why bug impact is bounded and recoverable (creators of affected pools can launch new pools with fixed mixers).
+
+### Cross-chain reorg risk
+
+Cross-chain verification reflects the state of the source chain at a specific block. If the source chain subsequently reorgs past that block, the verified fact could become retroactively false. The mitigation is the confirmation-depth check stage of the cross-chain pipeline, which requires the witness to include N follow-on headers with valid proof of work. The consuming contract chooses N based on its risk tolerance. For a cross-chain NativeSwap trading thousands of dollars, six confirmations may be enough. For millions, a hundred may be appropriate. This is an application-level choice, not a framework-level one, but the framework provides the primitive for consuming contracts to express their finality assumption precisely.
 
 ---
 
@@ -1020,14 +1113,14 @@ All parameters are validated at deployment. Invalid configurations (bad mixer ID
 
 ## Summary
 
-Toil is a protocol for making verifiable proof of work a first class on-chain primitive on Bitcoin. It consists of three contracts: a Core that does everything, optional external mixer contracts that extend the library of available hash primitives, and optional reward hook contracts that customize emission logic for specific pools. The Core exposes both a stateful submission interface for miners and a stateless verification interface for other OPNet contracts.
+Toil is a protocol for making verifiable proof of work a first class on-chain primitive on OPNet. OPNet is a consensus layer that runs on any UTXO chain, Bitcoin being the first deployment and the one this document primarily discusses, with Litecoin, Dogecoin, and any other UTXO-model chain being valid hosts that anyone can deploy today. Toil consists of three contracts: a Core that does everything, optional external mixer contracts that extend the library of available hash primitives and cross-chain verifiers, and optional reward hook contracts that customize emission logic for specific pools. The Core exposes both a stateful submission interface for miners and a stateless verification interface for other OPNet contracts.
 
 The four mining pool modes (fresh OP20, existing OP20 attachment, retrofit from deposited reserve, NFT minting) cover every practical case for converting computational work into an on-chain asset. Creators configure their pool's hardware bias via the mixer pipeline, variance profile via the variance curve, emission economics via the reward schedule or hook, and fairness tradeoffs via the caps and minimum target. Multi algo pools let creators support multiple hardware classes in a single pool, including direct Bitcoin merge mining alongside custom algorithms targeting CPUs or GPUs.
 
-The most strategically important capability Toil enables is merge mining with Bitcoin, which is possible only because OPNet is a consensus layer on Bitcoin rather than a separate chain. This gives Toil a pipeline to the world's largest pool of mining hardware that no other smart contract platform can access. The second most important capability is the verify-only entry point that lets other OPNet contracts consume proofs as a pure function, turning Toil from a coin launcher into a composable primitive that every OPNet application can build on.
+The most strategically important capability Toil enables on the Bitcoin deployment is merge mining with Bitcoin, which is possible only because OPNet is a consensus layer on Bitcoin rather than a separate chain. This gives Toil a pipeline to the world's largest pool of mining hardware that no other smart contract platform can access. The same pattern applies on any future OPNet deployment hosted by another UTXO chain, with that chain's mining industry in place of Bitcoin's. The second most important capability is the verify-only entry point that lets other OPNet contracts consume proofs as a pure function, turning Toil from a coin launcher into a composable primitive that every OPNet application can build on. The third, which may prove to be the largest in its long-term consequences, is cross-chain state verification. Toil mixers can verify claims about another UTXO chain's state by consuming that chain's block headers, Merkle proofs, and transaction data as witness bytes, with forgery costing real hashrate on the source chain rather than compromising a committee of signers. This turns Toil into the attestation primitive for bridgeless cross-chain composition, including swaps, lending, oracles, and any application that needs to reason about state across chains. Toil is the first step toward that world.
 
 QBTC is the inaugural deployment that makes these capabilities concrete. It is an OP20 token on OPNet, minted by Bitcoin's own hashrate through a single stage double SHA256 pipeline, with a supply curve that mirrors Bitcoin's in real time by reading Bitcoin's block height from OPNet's native block context. It is custodied under MLDSA, which is quantum safe by construction, while Bitcoin's own custody under ECDSA and Schnorr is not. QBTC is not wrapped Bitcoin, not bridged Bitcoin, not a peg of any kind. It is a parallel asset whose mining demographic is Bitcoin's mining industry and whose monetary rules are Bitcoin's monetary rules, filling the Bitcoin-analog DeFi pair role on OPNet that WBTC fills on Ethereum, and doing so without any trust assumption beyond OPNet's own consensus.
 
-The protocol is the protocol that made QBTC possible, plus everything else that wants to use the same primitive. Every design decision prioritizes immutability for miners, simplicity for creators, composability for consuming contracts, and constant gas cost for the protocol itself. The ecosystem that grows on top of the Core will decide what Toil becomes beyond QBTC. 
+The protocol is the protocol that made QBTC possible, plus everything else that wants to use the same primitive. Every design decision prioritizes immutability for miners, simplicity for creators, composability for consuming contracts, and constant gas cost for the protocol itself. The ecosystem that grows on top of the Core will decide what Toil becomes beyond QBTC and beyond the Bitcoin deployment.
 
 The primitive is the product, QBTC is the proof that the primitive matters, and the rest is open.
