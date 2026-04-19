@@ -1,0 +1,65 @@
+{
+    "type": "module",
+    "name": "toil",
+    "version": "1.0.0",
+    "description": "Bitcoin Smart Contracts Node",
+    "main": "build/index.js",
+    "scripts": {
+        "watch": "gulp watch",
+        "start": "cd build && node --optimize_for_size index",
+        "build": "gulp",
+        "test": "vitest",
+        "setup": "npm i && npm run build"
+    },
+    "engines": {
+        "node": ">=24.0.0 <26.0.0"
+    },
+    "keywords": [
+        "opnet",
+        "opnet node",
+        "opnet indexer",
+        "bitcoin",
+        "btc",
+        "bitcoin-rpc",
+        "bitcoin transaction",
+        "transaction builder",
+        "transaction signer",
+        "bitcoin smart contracts"
+    ],
+    "author": "Blobmaster41",
+    "license": "Apache-2.0",
+    "overrides": {
+        "typescript-eslint": {
+            "typescript": "$typescript"
+        }
+    },
+    "dependencies": {
+        "@btc-vision/bip32": "^7.1.2",
+        "@btc-vision/bitcoin": "^7.0.0",
+        "@btc-vision/ecpair": "^4.0.5",
+        "@btc-vision/logger": "^1.0.8",
+        "@btc-vision/post-quantum": "^0.5.3",
+        "@btc-vision/transaction": "^1.8.6",
+        "opnet": "^1.8.13",
+        "typescript": "^6.0.2"
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "@types/cors": "^2.8.19",
+        "@types/node": "^25.6.0",
+        "@types/semver": "^7.7.1",
+        "@types/sodium-native": "^2.3.9",
+        "@types/ssh2": "^1.15.5",
+        "@types/swagger-ui-express": "^4.1.8",
+        "@vitest/coverage-v8": "^4.1.4",
+        "eslint": "^10.2.0",
+        "gulp": "^5.0.1",
+        "gulp-cached": "^1.1.1",
+        "gulp-clean": "^0.4.0",
+        "gulp-eslint-new": "^2.6.2",
+        "gulp-typescript": "^6.0.0-alpha.1",
+        "prettier": "^3.8.2",
+        "typescript-eslint": "^8.58.1",
+        "vitest": "^4.1.4"
+    }
+}

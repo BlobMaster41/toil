@@ -1,0 +1,34 @@
+{
+    "compilerOptions": {
+        "module": "ESNext",
+        "target": "ESNext",
+        "strict": true,
+        "strictNullChecks": true,
+        "strictFunctionTypes": true,
+        "strictBindCallApply": true,
+        "strictPropertyInitialization": true,
+        "alwaysStrict": true,
+        "declaration": true,
+        "noImplicitAny": true,
+        "removeComments": false,
+        "verbatimModuleSyntax": true,
+        "suppressImplicitAnyIndexErrors": false,
+        "preserveConstEnums": true,
+        "resolveJsonModule": true,
+        "skipLibCheck": true,
+        "sourceMap": false,
+        "moduleDetection": "force",
+        "allowImportingTsExtensions": false,
+        "experimentalDecorators": true,
+        "lib": ["ESNext", "Decorators", "DOM"],
+
+        "allowJs": true,
+        "incremental": true,
+        "allowSyntheticDefaultImports": true,
+        "outDir": "build",
+        "rootDir": "src",
+        "typeRoots": ["src/src/g.d.ts", "node_modules/@types"]
+    },
+    "exclude": ["node_modules"],
+    "include": ["src/**/*.ts", "src/*", "src/**/*.js", "src/*.ts", "src/*.js", "src/*.cjs"]
+}

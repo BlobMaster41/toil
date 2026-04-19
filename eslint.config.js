@@ -1,0 +1,55 @@
+// @ts-check
+
+import tseslint from 'typescript-eslint';
+import eslint from '@eslint/js';
+import noUint8ArrayToString from './eslint-rules/no-uint8array-tostring.ts';
+
+export default [
+    eslint.configs.recommended,
+    ...tseslint.configs.strictTypeChecked,
+    {
+        plugins: {
+            opnet: noUint8ArrayToString,
+        },
+        languageOptions: {
+            parserOptions: {
+                projectService: {
+                    allowDefaultProject: ['eslint-rules/*.ts'],
+                },
+                tsconfigDirName: import.meta.dirname,
+            },
+        },
+        rules: {
+            'no-undef': 'off',
+            '@typescript-eslint/no-unused-vars': 'off',
+            'no-empty': 'off',
+            '@typescript-eslint/restrict-template-expressions': 'off',
+            '@typescript-eslint/only-throw-error': 'off',
+            '@typescript-eslint/no-unnecessary-condition': 'off',
+            '@typescript-eslint/unbound-method': 'warn',
+            '@typescript-eslint/no-confusing-void-expression': 'off',
+            '@typescript-eslint/no-extraneous-class': 'off',
+            'no-async-promise-executor': 'off',
+            '@typescript-eslint/no-misused-promises': 'off',
+            '@typescript-eslint/no-unnecessary-type-parameters': 'off',
+            '@typescript-eslint/no-duplicate-enum-values': 'off',
+            'prefer-spread': 'off',
+            '@typescript-eslint/no-empty-object-type': 'off',
+            '@typescript-eslint/related-getter-setter-pairs': 'off',
+            'max-depth': ['error', 8],
+            '@typescript-eslint/require-await': 'warn',
+            '@typescript-eslint/no-unnecessary-type-arguments': 'off',
+            '@typescript-eslint/no-deprecated': 'off',
+            'no-debugger': 'off',
+            '@typescript-eslint/no-unnecessary-type-conversion': 'warn',
+            'opnet/no-uint8array-tostring': 'error',
+
+            // This is stupid. null and undefined is not the same thing. who ever made this eslint rule is stupid.
+            'no-useless-assignment': 'off',
+        },
+    },
+    {
+        files: ['**/*.js'],
+        ...tseslint.configs.disableTypeChecked,
+    },
+];
