@@ -1,6 +1,6 @@
 # Toil
 
-> A composable proof of work primitive any chain supporting OPNet. Toil turns verifiable computational work into a callable resource that any OPNet contract can consume. Coin minting is the reference implementation. The primitive is the product.
+> A composable proof of work primitive on any chain supporting OPNet. Toil turns verifiable computational work into a callable resource that any OPNet contract can consume. Coin minting is the reference implementation. The primitive is the product.
 
 [toil.org](https://toil.org)
 
